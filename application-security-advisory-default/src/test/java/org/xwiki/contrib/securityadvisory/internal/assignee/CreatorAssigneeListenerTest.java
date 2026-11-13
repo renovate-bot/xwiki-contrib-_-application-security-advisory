@@ -25,8 +25,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.xwiki.bridge.event.DocumentCreatingEvent;
 import org.xwiki.contrib.securityadvisory.SecurityAdvisoryConfiguration;
+import org.xwiki.contrib.securityadvisory.event.AdvisoryImportingEvent;
 import org.xwiki.contrib.securityadvisory.internal.SecurityAdvisoryApplicationClassMandatoryDocumentInitializer;
 import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.observation.ObservationContext;
 import org.xwiki.test.junit5.mockito.InjectMockComponents;
 import org.xwiki.test.junit5.mockito.MockComponent;
 import org.xwiki.user.UserReference;
@@ -40,6 +42,7 @@ import com.xpn.xwiki.test.junit5.mockito.OldcoreTest;
 import com.xpn.xwiki.test.reference.ReferenceComponentList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +63,9 @@ class CreatorAssigneeListenerTest
 
     @MockComponent
     private UserPropertyConverter userPropertyConverter;
+
+    @MockComponent
+    private ObservationContext observationContext;
 
     @InjectMockitoOldcore
     private MockitoOldcore oldcore;
@@ -82,7 +88,6 @@ class CreatorAssigneeListenerTest
         this.document.getAuthors().setCreator(this.creator);
         when(this.userPropertyConverter.serialize(this.creator, this.document.getDocumentReference()))
             .thenReturn("XWiki.creator");
-        when(this.configuration.getAdvisoryImporterUser()).thenReturn(mock(UserReference.class));
     }
 
     private String getAssignee()
@@ -134,13 +139,24 @@ class CreatorAssigneeListenerTest
     }
 
     @Test
-    void doNotAssignImporterUser()
+    void doNotAssignAdvisorySavedByImport()
     {
-        when(this.configuration.getAdvisoryImporterUser()).thenReturn(this.creator);
+        when(this.observationContext.isIn(any(AdvisoryImportingEvent.class))).thenReturn(true);
 
-        this.listener.onEvent(new DocumentCreatingEvent(), this.document, null);
+        this.listener.onEvent(new DocumentCreatingEvent(), this.document, this.oldcore.getXWikiContext());
 
         assertEquals("", getAssignee());
+    }
+
+    @Test
+    void assignImporterUserCreatingAdvisoryByHand()
+    {
+        // The importer user, XWiki.Admin by default, is also a real user creating advisories by hand.
+        when(this.configuration.getAdvisoryImporterUser()).thenReturn(this.creator);
+
+        this.listener.onEvent(new DocumentCreatingEvent(), this.document, this.oldcore.getXWikiContext());
+
+        assertEquals("XWiki.creator", getAssignee());
     }
 
     @Test

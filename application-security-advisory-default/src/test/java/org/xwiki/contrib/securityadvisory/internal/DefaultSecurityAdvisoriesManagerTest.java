@@ -25,8 +25,12 @@ import java.util.Optional;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
+import org.xwiki.bridge.event.DocumentCreatedEvent;
 import org.xwiki.contrib.securityadvisory.ExternalUser;
 import org.xwiki.contrib.securityadvisory.SecurityAdvisory;
+import org.xwiki.contrib.securityadvisory.event.AdvisoryImportedEvent;
+import org.xwiki.contrib.securityadvisory.event.AdvisoryImportingEvent;
 import org.xwiki.contrib.securityadvisory.event.AdvisoryStateChangedEvent;
 import org.xwiki.contrib.securityadvisory.internal.assignee.ExternalUserMappingStore;
 import org.xwiki.contrib.securityadvisory.internal.assignee.UserPropertyConverter;
@@ -55,6 +59,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -151,6 +156,22 @@ class DefaultSecurityAdvisoriesManagerTest
         SecurityAdvisory loadedAdvisory = this.manager.loadAdvisory(ADVISORY_REFERENCE).orElseThrow();
         assertEquals(this.mappedUser, loadedAdvisory.getAssignee());
         assertEquals(EXTERNAL_USERS, loadedAdvisory.getExternalUsers());
+    }
+
+    @Test
+    void writeAdvisorySavesInsideImportEvents() throws Exception
+    {
+        this.oldcore.notifyDocumentCreatedEvent(true);
+        SecurityAdvisory advisory = importedAdvisory();
+
+        this.manager.writeAdvisory(advisory);
+
+        // The listeners of the save know that the advisory is imported.
+        XWikiContext context = this.oldcore.getXWikiContext();
+        InOrder inOrder = inOrder(this.observationManager);
+        inOrder.verify(this.observationManager).notify(any(AdvisoryImportingEvent.class), eq(advisory), eq(context));
+        inOrder.verify(this.observationManager).notify(any(DocumentCreatedEvent.class), any(), any());
+        inOrder.verify(this.observationManager).notify(any(AdvisoryImportedEvent.class), eq(advisory), eq(context));
     }
 
     @Test
